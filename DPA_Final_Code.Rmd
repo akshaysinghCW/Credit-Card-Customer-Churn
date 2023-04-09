@@ -1,0 +1,352 @@
+---
+title: "Data Preparation and Analysis"
+author: "Akshay Singh, Ravi Teja, Raj Shah"
+date: "2022-11-21"
+output: pdf_document
+---
+
+```{r cars}
+library(plyr)
+library(corrplot)
+library(ggplot2)
+library(gridExtra)
+library(ggthemes)
+library(caret)
+library(lattice)
+library(MASS)
+library(randomForest)
+library(party)
+library(sandwich)
+library(rpart)
+library(rattle)
+library(GoodmanKruskal)
+library(e1071)
+library(rpart.plot)
+library(caTools)
+library(class)
+```
+
+```{r}
+churn <- read.csv('BankChurners.csv')
+str(churn)
+```
+
+```{r}
+sapply(churn, function(x) sum(is.na(x)))
+
+churn$Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_1  <- NULL
+churn$Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_2 <- NULL
+churn$CLIENTNUM <- NULL
+```
+
+
+```{r}
+str(churn)
+summary(churn)
+```
+
+
+```{r}
+print(head(churn[1:3,]))
+```
+```{r}
+#Data Exploration
+ggplot(churn, aes(x=Gender)) + 
+  geom_bar(stat="count") + 
+  labs(title= "Attrition number by Gender", x= "Gender", y="Attrition") + 
+  theme_classic() + scale_color_brewer(palette="Set2")
+
+ggplot(churn, aes(x=Customer_Age)) + 
+  geom_bar(stat="count") + 
+  labs(title= "Attrition number by Age", x= "Age", y="Attrition") + 
+  theme_classic() + scale_color_brewer(palette="Set2")
+
+ggplot(churn, aes(x=Education_Level)) + 
+  geom_bar(stat="count") + 
+  labs(title= "Attrition number by Education", x= "Education", y="Attrition") + 
+  theme_classic() + scale_color_brewer(palette="Set2")
+
+ggplot(churn, aes(x=Income_Category)) + 
+  geom_bar(stat="count") + 
+  labs(title= "Attrition number by Income", x= "Income", y="Attrition") + 
+  theme_classic() + scale_color_brewer(palette="Set2")
+
+ggplot(churn, aes(x=Card_Category)) + 
+  geom_bar(stat="count") + 
+  labs(title= "Attrition number by Card Type", x= "Card Type", y="Attrition") + 
+  theme_classic() + scale_color_brewer(palette="Set2")
+
+```
+
+```{r}
+table(churn$Attrition_Flag, churn$Customer_Age)
+table(churn$Attrition_Flag, churn$Gender)
+
+```
+
+```{r}
+ggplot(churn, aes(x=Attrition_Flag,
+                  y= prop.table(stat(count)),
+                  fill= factor(Gender),
+                  label= scales::percent(prop.table(stat(count))))) +
+  geom_bar(position = position_dodge())+
+  geom_text(stat="count",
+            position = position_dodge(.9),
+            vjust= -0.5, size=3)+
+  scale_y_continuous(labels = scales::percent)+
+  labs(title = "Attrition by Gender",
+       x= "Attrition status",
+       y="Count")+
+  theme_classic()+
+  scale_fill_discrete(
+    name="Gender",
+    breaks=c("M", "F"),
+    labels=c("Male", "Female" )
+  )
+
+ggplot(churn, aes(x=Attrition_Flag,
+                  y= prop.table(stat(count)),
+                  fill= factor(Card_Category),
+                  label= scales::percent(prop.table(stat(count))))) +
+  geom_bar(position = position_dodge())+
+  geom_text(stat="count",
+            position = position_dodge(.9),
+            vjust= -0.5, size=3)+
+  scale_y_continuous(labels = scales::percent)+
+  labs(title = "Attrition by Card Category",
+       x= "Attrition status",
+       y="Count")+
+  theme_classic()
+
+ggplot(churn, aes(x=Attrition_Flag,
+                  y= prop.table(stat(count)),
+                  fill= factor(Income_Category),
+                  label= scales::percent(prop.table(stat(count))))) +
+  geom_bar(position = position_dodge())+
+  geom_text(stat="count",
+            position = position_dodge(.9),
+            vjust= -0.5, size=3)+
+  scale_y_continuous(labels = scales::percent)+
+  labs(title = "Attrition by Income Category",
+       x= "Attrition status",
+       y="Count")+
+  theme_classic()
+
+ggplot(churn, aes(y=Customer_Age,
+                  x= Education_Level,
+                  fill= factor(Attrition_Flag))) +
+  geom_boxplot(position = position_dodge())+
+  labs(title = "Attrition Status By Age and Education",
+       x= "Education level",
+       y="Age")+ theme_light()
+
+ggplot(churn, aes(Months_on_book))+
+  geom_density(col="blue")+ facet_wrap(~Attrition_Flag)+theme_bw()
+
+ggplot(churn, aes(Marital_Status))+
+  geom_density(col="blue")+ facet_wrap(~Attrition_Flag)+theme_bw()
+
+ggplot(churn, aes(Dependent_count))+
+  geom_density(col="blue")+ facet_wrap(~Attrition_Flag)+theme_bw()
+```
+
+
+```{r}
+#PCA starts here
+#PCA
+churn.pca <- prcomp(scale(churn[,c(2,4,9:20)]), center = TRUE)
+summary(churn.pca)
+```
+```{r}
+pc_data <- churn.pca$x[,1:10]
+cat_data <- churn[,c(1,3,5:8)]
+churn_pca <-data.frame(cat_data, pc_data)
+```
+
+
+```{r}
+churn_pca[sapply(churn_pca, is.character)]<- lapply(churn_pca[sapply(churn_pca, is.character)], as.factor)
+summary(churn_pca)
+```
+
+```{r}
+#Plotting PCA
+plot(churn.pca$x[,1],churn.pca$x[,2])
+```
+
+```{r}
+#How much variation in the original data does PCA account for
+churn.pca.var <- churn.pca$sdev^2
+churn.pca.var.per <- round(churn.pca.var/sum(churn.pca.var)*100,1)
+churn.pca.var.per
+```
+
+
+```{r}
+#Plotting PCA percentages
+barplot(churn.pca.var.per, main="Scree Plot", xlab="Principal Component Analysis", names = c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6", "PC7", "PC8", "PC9", "PC10", "PC11", "PC12", "PC13","PC14"), ylab="Percent Variation", )
+#PCA ends here
+```
+
+
+
+```{r}
+#Converting all features to categorical data
+churn[sapply(churn, is.character)]<- lapply(churn[sapply(churn, is.character)], as.factor)
+```
+
+```{r}
+str(churn)
+summary(churn)
+```
+
+
+```{r}
+#Splitting the pca dataset
+intrain_pca<- createDataPartition(churn_pca$Attrition_Flag, p=0.80, list = FALSE)
+training_pca<- churn_pca[intrain_pca,]
+testing_pca<- churn_pca[-intrain_pca,]
+dim(training_pca); dim(testing_pca)
+#summary(training_pca)
+#summary(testing_pca)
+```
+
+```{r}
+#Splitting the regular dataset
+intrain_reg<- createDataPartition(churn$Attrition_Flag, p=0.80, list = FALSE)
+training_reg<- churn[intrain_reg,]
+testing_reg<- churn[-intrain_reg,]
+dim(training_reg); dim(testing_reg)
+#summary(training_reg)
+#summary(testing_reg)
+```
+
+
+
+```{r}
+#Randomforest for PCA data
+random_forest <- randomForest(Attrition_Flag ~ ., ntree= 500, family="binomial", data=training_pca)
+print(summary(random_forest))
+random_forest
+rf_pred <- predict(random_forest, testing_pca)
+caret::confusionMatrix(rf_pred, testing_pca$Attrition_Flag)
+```
+```{r}
+#Randomforest for Regular data
+random_forest <- randomForest(Attrition_Flag ~ ., ntree= 500, family="binomial", data=training_reg)
+print(summary(random_forest))
+random_forest
+rf_pred <- predict(random_forest, testing_reg)
+caret::confusionMatrix(rf_pred, testing_reg$Attrition_Flag)
+```
+
+
+```{r}
+#Logistic Regression for PCA Data
+LogModel <- glm(Attrition_Flag ~ ., family= "binomial", data = training_pca)
+print(summary(LogModel))
+anova(LogModel, test="Chisq")
+log_reg <- predict(LogModel, testing_pca[-1],  type = "response")
+y_pred <- ifelse(log_reg > 0.5, 2, 1)
+y_pred <- as.numeric(y_pred)
+target <- as.numeric(testing_pca$Attrition_Flag)
+#prop.table(table(training_pca$Attrition_Flag))
+caret::confusionMatrix(table(y_pred, target)) 
+
+```
+
+
+
+```{r}
+#Logistic Regression for Regular Data
+LogModel <- glm(Attrition_Flag ~ ., family= "binomial", data = training_reg)
+print(summary(LogModel))
+anova(LogModel, test="Chisq")
+log_reg <- predict(LogModel, testing_reg[-1],  type = "response")
+y_pred <- ifelse(log_reg > 0.5, 2, 1)
+y_pred <- as.numeric(y_pred)
+target <- as.numeric(testing_pca$Attrition_Flag)
+#prop.table(table(training_pca$Attrition_Flag))
+caret::confusionMatrix(table(y_pred, target)) 
+
+```
+
+
+```{r}
+#SVM for PCA Data
+svmfit = svm(Attrition_Flag ~ ., data = training_pca, cross = 10, gamma = 0.5, cost = 1)
+svm_pred <- predict(svmfit, testing_pca)
+summary(svmfit)
+caret::confusionMatrix(svm_pred, testing_pca$Attrition_Flag)
+```
+
+```{r}
+#SVM for Regular Data
+svmfit = svm(Attrition_Flag ~ ., data = training_reg, cross = 10, gamma = 0.5, cost = 1)
+svm_pred <- predict(svmfit, testing_reg)
+summary(svmfit)
+caret::confusionMatrix(svm_pred, testing_reg$Attrition_Flag)
+```
+
+```{r}
+#Naive Bayes for PCA Data
+naive_bayes<- naiveBayes(Attrition_Flag ~ ., data= training_pca)
+naive_bayes
+nb_pred<- predict(naive_bayes, testing_pca)
+caret::confusionMatrix(nb_pred, testing_pca$Attrition_Flag)
+```
+
+```{r}
+#Naive Bayes for Regular Data
+naive_bayes<- naiveBayes(Attrition_Flag ~ ., data= training_reg)
+naive_bayes
+nb_pred<- predict(naive_bayes, testing_reg)
+caret::confusionMatrix(nb_pred, testing_reg$Attrition_Flag)
+```
+
+```{r}
+#Decision tree for PCA data
+decision_tree <- ctree(Attrition_Flag ~ ., data= training_pca)
+decision_tree
+dt_pred<- predict(decision_tree, testing_pca)
+caret::confusionMatrix(dt_pred, testing_pca$Attrition_Flag)
+```
+
+```{r}
+#Decision tree for Regular data
+decision_tree <- ctree(Attrition_Flag ~ ., data= training_reg)
+decision_tree
+dt_pred<- predict(decision_tree, testing_reg)
+caret::confusionMatrix(dt_pred, testing_reg$Attrition_Flag)
+```
+
+```{r}
+# Comparision of different models on PCA Data 
+
+H = c(91.26,87.21,89.78,88.74,90.07)
+names1 = c("Random Forest","SVM" , "Naive Bayes","Decision Tree","Logistic Regression")
+experiment <- data.frame(Algorithm = names1,
+                         Percentage = H)
+ggplot(data = experiment, mapping = aes(x=Algorithm, y=Percentage)) +
+  geom_bar(stat="identity", position = "dodge",fill="lightblue") + scale_fill_brewer(palette = "Pastel2")+
+  geom_text(aes(label = Percentage), vjust = -0.2, size = 5,
+            position = position_dodge(0.9)) +
+  ylim(0, max(experiment$Percentage)*1.1)
+```
+```{r}
+# Comparision of different models on Regular Data 
+
+H = c(96.35,86.86,89.33,94.07, 76.05)
+names1 = c("Random Forest","SVM" , "Naive Bayes","Decision Tree","Logistic Regression")
+experiment <- data.frame(Algorithm = names1,
+                         Percentage = H)
+ggplot(data = experiment, mapping = aes(x=Algorithm, y=Percentage)) +
+  geom_bar(stat="identity", position = "dodge",fill="lightblue") + scale_fill_brewer(palette = "Pastel2")+
+  geom_text(aes(label = Percentage), vjust = -0.2, size = 5,
+            position = position_dodge(0.9)) +
+  ylim(0, max(experiment$Percentage)*1.1)
+```
+
+
+
+
